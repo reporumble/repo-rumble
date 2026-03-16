@@ -1,5 +1,5 @@
 // ==================== CONFIG ====================
-const API = 'https://api.github.com';
+const API = '/api';
 let fighters = [null, null];
 let battleEngine = null;
 let skipMode = false;
