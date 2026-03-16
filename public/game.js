@@ -61,6 +61,7 @@ function setCachedFighter(name, fighter) {
 
 // ==================== LEADERBOARD ====================
 const LB_KEY = 'repo-rumble-leaderboard';
+let leaderboardMode = 'global';
 
 function getLeaderboard() {
   try { return JSON.parse(localStorage.getItem(LB_KEY) || '{"fighters":{},"history":[]}'); }
@@ -69,45 +70,82 @@ function getLeaderboard() {
 
 function recordFight(winner, loser, stage) {
   const lb = getLeaderboard();
-  // Winner
   if (!lb.fighters[winner.name]) lb.fighters[winner.name] = { wins: 0, losses: 0, avatar: winner.avatar, className: winner.className, url: winner.url };
   lb.fighters[winner.name].wins++;
   lb.fighters[winner.name].avatar = winner.avatar;
-  // Loser
   if (!lb.fighters[loser.name]) lb.fighters[loser.name] = { wins: 0, losses: 0, avatar: loser.avatar, className: loser.className, url: loser.url };
   lb.fighters[loser.name].losses++;
   lb.fighters[loser.name].avatar = loser.avatar;
-  // History (keep last 50)
   lb.history.unshift({ p1: winner.name, p2: loser.name, winner: winner.name, stage: stage || '', date: Date.now() });
   if (lb.history.length > 50) lb.history.length = 50;
   localStorage.setItem(LB_KEY, JSON.stringify(lb));
 }
 
-function renderLeaderboard() {
-  const lb = getLeaderboard();
-  const container = document.getElementById('lb-body');
-  const entries = Object.entries(lb.fighters)
-    .map(([name, data]) => ({ name, ...data, total: data.wins + data.losses, winrate: data.wins / Math.max(1, data.wins + data.losses) }))
-    .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+async function submitFightToServer(winner, loser, stage) {
+  try {
+    await fetch('/api/leaderboard/fight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        winner: { name: winner.name, avatar: winner.avatar, url: winner.url, className: winner.className },
+        loser: { name: loser.name, avatar: loser.avatar, url: loser.url, className: loser.className },
+        stage: stage || '',
+      }),
+    });
+  } catch (e) { /* silent fail — local leaderboard still works */ }
+}
 
-  if (entries.length === 0) {
+function switchLeaderboard(mode) {
+  leaderboardMode = mode;
+  document.getElementById('lb-tab-global').classList.toggle('active', mode === 'global');
+  document.getElementById('lb-tab-local').classList.toggle('active', mode === 'local');
+  renderLeaderboard();
+}
+
+async function renderLeaderboard() {
+  const container = document.getElementById('lb-body');
+
+  if (leaderboardMode === 'global') {
+    container.innerHTML = '<tr><td colspan="6" class="lb-empty"><span class="spinner"></span> Loading...</td></tr>';
+    try {
+      const resp = await fetch('/api/leaderboard');
+      if (!resp.ok) throw new Error('Failed');
+      const entries = await resp.json();
+      renderLeaderboardEntries(container, entries);
+    } catch (e) {
+      container.innerHTML = '<tr><td colspan="6" class="lb-empty">Could not load global leaderboard</td></tr>';
+    }
+  } else {
+    const lb = getLeaderboard();
+    const entries = Object.entries(lb.fighters)
+      .map(([name, data]) => ({ name, ...data, total: data.wins + data.losses, winrate: data.wins / Math.max(1, data.wins + data.losses) }))
+      .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+    renderLeaderboardEntries(container, entries);
+  }
+}
+
+function renderLeaderboardEntries(container, entries) {
+  if (!entries || entries.length === 0) {
     container.innerHTML = '<tr><td colspan="6" class="lb-empty">No fights yet. Battle some repos!</td></tr>';
     return;
   }
-
-  container.innerHTML = entries.slice(0, 25).map((e, i) => `
-    <tr>
+  container.innerHTML = entries.slice(0, 50).map((e, i) => {
+    const total = e.total || (e.wins + e.losses);
+    const winrate = e.winrate != null ? e.winrate : (e.wins / Math.max(1, total));
+    const avatar = e.avatar || '';
+    const url = e.url || `https://github.com/${e.name}`;
+    return `<tr>
       <td class="lb-rank ${i === 0 ? 'lb-rank-1' : ''}">${i + 1}</td>
       <td class="lb-name">
-        <img class="lb-avatar" src="${e.avatar}" alt="">
-        <a href="${e.url}" target="_blank" rel="noopener">${e.name}</a>
+        ${avatar ? `<img class="lb-avatar" src="${avatar}" alt="">` : ''}
+        <a href="${url}" target="_blank" rel="noopener">${e.name}</a>
       </td>
       <td class="lb-wins">${e.wins}</td>
       <td class="lb-losses">${e.losses}</td>
-      <td class="lb-total">${e.total}</td>
-      <td class="lb-winrate" style="color:${e.winrate >= 0.6 ? 'var(--green)' : e.winrate >= 0.4 ? 'var(--yellow)' : 'var(--red)'}">${Math.round(e.winrate * 100)}%</td>
-    </tr>
-  `).join('');
+      <td class="lb-total">${total}</td>
+      <td class="lb-winrate" style="color:${winrate >= 0.6 ? 'var(--green)' : winrate >= 0.4 ? 'var(--yellow)' : 'var(--red)'}">${Math.round(winrate * 100)}%</td>
+    </tr>`;
+  }).join('');
 }
 
 // ==================== ROSTER (Recent Fighters) ====================
@@ -694,10 +732,11 @@ function showVictory() {
   const winner = battleEngine.winner;
   const draw = !winner;
 
-  // Record to leaderboard
+  // Record to leaderboard (local + global)
   if (!draw) {
     const loser = winner === f1 ? f2 : f1;
     recordFight(winner, loser, currentStageName);
+    submitFightToServer(winner, loser, currentStageName);
   }
 
   document.getElementById('victory-avatar').src = draw ? '' : winner.avatar;

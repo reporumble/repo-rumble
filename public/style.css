@@ -315,6 +315,11 @@ body::before {
 /* ========== LEADERBOARD SCREEN ========== */
 #leaderboard-screen { align-items: center; padding: 30px 20px; gap: 20px; }
 
+.lb-tabs { display: flex; gap: 0; border: 2px solid var(--border); overflow: hidden; }
+.lb-tab { font-family: var(--pixel-font); font-size: 9px; padding: 10px 24px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; transition: all 0.2s; letter-spacing: 2px; }
+.lb-tab:hover { background: rgba(255,255,255,0.03); }
+.lb-tab.active { color: var(--yellow); background: rgba(255,230,0,0.05); border-bottom: 2px solid var(--yellow); }
+
 .lb-title {
   font-size: clamp(14px, 2.5vw, 24px);
   color: var(--yellow);
