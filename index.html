@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REPO RUMBLE - GitHub Repository Battle Arena</title>
+<meta property="og:title" content="REPO RUMBLE - GitHub Repository Battle Arena">
+<meta property="og:description" content="Pit any two GitHub repos against each other in arcade-style combat. Stats derived from real repo data. Two repos enter. One repo leaves.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://reporumble.com">
+<meta property="og:see_also" content="https://github.com/reporumble/repo-rumble">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="REPO RUMBLE">
+<meta name="twitter:description" content="GitHub repos fight each other. Stats from real data. Two repos enter. One repo leaves.">
+<meta name="description" content="Pit any two GitHub repos against each other in arcade-style combat. Stats derived from real repo data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ==================== TITLE SCREEN ==================== -->
+<div id="title-screen" class="screen active">
+  <div class="title-main">REPO RUMBLE</div>
+  <div class="title-sub">GitHub Repository Battle Arena</div>
+  <div class="title-tagline">Two repos enter. One repo leaves.</div>
+  <div class="title-nav">
+    <button class="btn" onclick="rematchCount=0; showScreen('select')">SELECT FIGHTERS</button>
+    <button class="btn btn-yellow btn-sm" onclick="showScreen('leaderboard')">LEADERBOARD</button>
+  </div>
+  <button class="token-toggle" onclick="toggleToken()">GitHub Token (optional, higher rate limit)</button>
+  <div class="token-area" id="token-area">
+    <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx" oninput="saveToken(this.value)" onkeydown="if(event.key==='Enter')verifyTokenBtn()">
+    <button class="scan-btn" onclick="verifyTokenBtn()" style="font-size:8px;padding:8px 12px">VERIFY</button>
+    <small>Stored in localStorage only. Increases API limit from 60 to 5,000/hr.</small>
+    <small><a href="https://github.com/settings/tokens/new?description=Repo+Rumble&scopes=public_repo" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline;font-family:var(--pixel-font);font-size:7px">Create token on GitHub</a> (select "public_repo" scope, or no scopes for read-only)</small>
+    <small id="token-status" style="min-height:14px"></small>
+  </div>
+</div>
+
+<!-- ==================== SELECT SCREEN ==================== -->
+<div id="select-screen" class="screen">
+  <div class="select-title">CHOOSE YOUR FIGHTERS</div>
+
+  <!-- Roster (recent fighters) -->
+  <div class="roster-section" id="roster-section">
+    <div class="roster-title">RECENT FIGHTERS</div>
+    <div class="roster-grid" id="roster-grid"></div>
+  </div>
+
+  <div class="select-arena">
+    <div class="fighter-slot" id="slot-1">
+      <div class="repo-input-row">
+        <input class="repo-input" id="repo-input-1" placeholder="owner/repo" value="gsd-build/get-shit-done">
+        <button class="scan-btn" onclick="scanRepo(1)">SCAN</button>
+        <button class="dice-btn" onclick="rollRandom(1)" title="Random repo">&#9860;</button>
+      </div>
+      <div class="scan-status" id="scan-status-1"></div>
+      <div class="fighter-card" id="card-1"></div>
+    </div>
+
+    <div class="vs-divider">VS</div>
+
+    <div class="fighter-slot" id="slot-2">
+      <div class="repo-input-row">
+        <input class="repo-input" id="repo-input-2" placeholder="owner/repo" value="context-foundry/context-foundry">
+        <button class="scan-btn" onclick="scanRepo(2)">SCAN</button>
+        <button class="dice-btn" onclick="rollRandom(2)" title="Random repo">&#9860;</button>
+      </div>
+      <div class="scan-status" id="scan-status-2"></div>
+      <div class="fighter-card" id="card-2"></div>
+    </div>
+  </div>
+
+  <div class="roll-both-row">
+    <button class="roll-both-btn" onclick="rollBothRandom()">&#9860; ROLL DICE &#9860;</button>
+  </div>
+
+  <div class="fight-row">
+    <button class="btn btn-pink" id="fight-btn" onclick="startBattle()" disabled>FIGHT!</button>
+  </div>
+</div>
+
+<!-- ==================== BATTLE SCREEN ==================== -->
+<div id="battle-screen" class="screen">
+  <div class="battle-header">
+    <div class="battle-fighter" id="battle-p1">
+      <div class="battle-name-row">
+        <img class="battle-mini-avatar" id="battle-mini-1" src="" alt="">
+        <div class="battle-name" id="battle-name-1">---</div>
+      </div>
+      <div class="hp-bar-container">
+        <div class="hp-bar-fill" id="hp-fill-1" style="width:100%"></div>
+        <div class="hp-text left" id="hp-text-1">? / ?</div>
+      </div>
+    </div>
+    <div class="battle-vs">VS</div>
+    <div class="battle-fighter right" id="battle-p2">
+      <div class="battle-name-row right">
+        <img class="battle-mini-avatar p2" id="battle-mini-2" src="" alt="">
+        <div class="battle-name p2" id="battle-name-2">---</div>
+      </div>
+      <div class="hp-bar-container">
+        <div class="hp-bar-fill p2" id="hp-fill-2" style="width:100%"></div>
+        <div class="hp-text right" id="hp-text-2">? / ?</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="battle-stage" id="battle-stage">
+    <!-- Pixel art stage background -->
+    <canvas class="stage-canvas" id="stage-canvas"></canvas>
+    <div class="crt-scanlines"></div>
+    <div class="crt-vignette"></div>
+    <div class="stage-label" id="stage-label"></div>
+
+    <div class="battle-avatar-container" id="avatar-container-1">
+      <img class="battle-avatar" id="battle-avatar-1" src="" alt="P1">
+    </div>
+    <div class="battle-center-icon" id="battle-icon">VS</div>
+    <div class="battle-avatar-container" id="avatar-container-2">
+      <img class="battle-avatar p2" id="battle-avatar-2" src="" alt="P2">
+    </div>
+  </div>
+
+  <div class="battle-log" id="battle-log"></div>
+
+  <div class="battle-controls">
+    <button class="btn" id="skip-btn" onclick="skipBattle()">SKIP &gt;&gt;</button>
+  </div>
+</div>
+
+<!-- ==================== VICTORY SCREEN ==================== -->
+<div id="victory-screen" class="screen">
+  <div class="victory-label">WINNER</div>
+  <img class="victory-avatar" id="victory-avatar" src="" alt="Winner">
+  <div class="victory-name" id="victory-name">---</div>
+  <div class="victory-subtitle" id="victory-subtitle"></div>
+
+  <div class="victory-repos" id="victory-repos"></div>
+
+  <svg class="radar-container" id="radar-chart" viewBox="0 0 300 300"></svg>
+
+  <table class="comparison-table" id="comparison-table"></table>
+
+  <div class="victory-btns">
+    <button class="btn btn-yellow" onclick="rematch()">REMATCH</button>
+    <button class="share-btn" onclick="shareFight()">SHARE FIGHT</button>
+    <button class="btn btn-sm" onclick="showScreen('leaderboard')">LEADERBOARD</button>
+    <button class="btn" onclick="rematchCount=0; showScreen('select')">NEW FIGHTERS</button>
+  </div>
+</div>
+
+<!-- ==================== LEADERBOARD SCREEN ==================== -->
+<div id="leaderboard-screen" class="screen">
+  <div class="lb-title">LEADERBOARD</div>
+
+  <table class="lb-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>FIGHTER</th>
+        <th>W</th>
+        <th>L</th>
+        <th>TOTAL</th>
+        <th>WIN%</th>
+      </tr>
+    </thead>
+    <tbody id="lb-body"></tbody>
+  </table>
+
+  <div class="victory-btns" style="padding-top:20px">
+    <button class="btn" onclick="rematchCount=0; showScreen('select')">BACK TO ARENA</button>
+    <button class="btn btn-pink btn-sm" onclick="showScreen('title')">TITLE</button>
+  </div>
+</div>
+
+<div class="rate-limit-bar" id="rate-limit-bar" style="display:none"></div>
+
+<script src="stages.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
